@@ -25,7 +25,7 @@
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { background: var(--navy); color: var(--text-primary); font-family: 'Rajdhani', sans-serif; overflow-x: hidden; }
 
   /* ── CURSOR ── */
@@ -275,6 +275,12 @@
     #cursor { display: none; }
     * { cursor: auto; }
   }
+
+  /* ── REDUCED MOTION (accessibility + battery) ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    #hero-video { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -301,7 +307,7 @@
 <!-- HERO -->
 <section id="hero">
   <div class="hero-bg"></div>
-  <video id="hero-video" autoplay muted playsinline loop style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; opacity:0.595;">
+  <video id="hero-video" muted playsinline loop preload="metadata" poster="AboutUsBGPoster.jpg" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; z-index:1; opacity:0.595;">
     <source src="AboutUsBG.mp4" type="video/mp4">
   </video>
   <div style="position:absolute; inset:0; z-index:2; background:linear-gradient(135deg, rgba(5,13,26,0.55) 0%, rgba(9,23,41,0.35) 50%, rgba(5,13,26,0.75) 100%);"></div>
@@ -564,6 +570,22 @@
       link.style.letterSpacing = '0.18em';
     }, { passive: true });
   });
+
+  // ── HERO VIDEO: connection-aware loading ──
+  const heroVideo = document.getElementById('hero-video');
+  if (heroVideo) {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const slowConnection = conn && (conn.saveData === true || ['slow-2g', '2g', '3g'].includes(conn.effectiveType));
+    if (slowConnection) {
+      heroVideo.preload = 'none';
+      heroVideo.style.opacity = '0';
+    } else {
+      heroVideo.muted = true;
+      heroVideo.play().catch(() => {
+        document.addEventListener('touchstart', () => { if (heroVideo.paused) { heroVideo.muted = true; heroVideo.play().catch(() => {}); } }, { once: true, passive: true });
+      });
+    }
+  }
 
   // ── SCROLL REVEAL ──
   const observer = new IntersectionObserver((entries) => {

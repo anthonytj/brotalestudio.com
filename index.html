@@ -24,7 +24,7 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
 
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
   body {
     background: var(--navy);
@@ -1011,6 +1011,12 @@
     .service-card:hover .service-card-img img,
     .service-card:hover .service-card-img video { transform: none; filter: brightness(0.7) saturate(0.8); }
   }
+
+  /* ── REDUCED MOTION (accessibility + battery) ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    #hero-video { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -1042,7 +1048,7 @@
   <div class="hero-bg-static"></div>
 
   <!-- Replace src with your actual video file once you have it -->
-  <video id="hero-video" autoplay muted playsinline loop>
+  <video id="hero-video" muted playsinline loop preload="metadata" poster="HeroPoster.jpg">
     <source src="Bg 2 v2.mp4" type="video/mp4">
   </video>
   <div class="hero-bg-overlay"></div>
@@ -1379,21 +1385,36 @@
 <script>
   // ── CURSOR + STAR TRAIL ──
   const cursor = document.getElementById('cursor');
+  const isTouchDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
   let mouseX = 0, mouseY = 0;
 
-  document.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX; mouseY = e.clientY;
-    cursor.style.left = mouseX + 'px';
-    cursor.style.top  = mouseY + 'px';
-    spawnTrail(mouseX, mouseY);
-  });
+  if (!isTouchDevice) {
+    let rafPending = false;
+    document.addEventListener('mousemove', (e) => {
+      mouseX = e.clientX; mouseY = e.clientY;
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {
+        cursor.style.left = mouseX + 'px';
+        cursor.style.top  = mouseY + 'px';
+        spawnTrail(mouseX, mouseY);
+        rafPending = false;
+      });
+    });
 
-  document.querySelectorAll('a, button').forEach(el => {
-    el.addEventListener('mouseenter', () => cursor.classList.add('hovered'));
-    el.addEventListener('mouseleave', () => cursor.classList.remove('hovered'));
-  });
+    document.querySelectorAll('a, button').forEach(el => {
+      el.addEventListener('mouseenter', () => cursor.classList.add('hovered'));
+      el.addEventListener('mouseleave', () => cursor.classList.remove('hovered'));
+    });
+  } else {
+    cursor.style.display = 'none';
+  }
 
+  let activeTrails = 0;
+  const MAX_ACTIVE_TRAILS = 14;
   function spawnTrail(x, y) {
+    if (activeTrails >= MAX_ACTIVE_TRAILS) return;
+    activeTrails++;
     const dot = document.createElement('div');
     dot.className = 'trail-dot';
     // Random slight offset for natural feel
@@ -1406,7 +1427,7 @@
     dot.style.background = hue;
     dot.style.boxShadow = `0 0 6px ${hue === 'var(--neon-blue)' ? 'var(--neon-blue-glow)' : 'var(--neon-red-glow)'}`;
     document.body.appendChild(dot);
-    setTimeout(() => dot.remove(), 1500);
+    setTimeout(() => { dot.remove(); activeTrails--; }, 1500);
   }
 
   // ── HAMBURGER MENU ──
@@ -1850,13 +1871,29 @@
   }, { threshold: 0.12 });
   revealEls.forEach(el => observer.observe(el));
 
-  // ── HERO VIDEO: fade out when ended, show static bg ──
+  // ── HERO VIDEO: connection-aware loading ──
   const video = document.getElementById('hero-video');
-  if (video && video.src) {
-    video.addEventListener('ended', () => {
-      video.style.transition = 'opacity 1.2s ease';
+  if (video) {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const slowConnection = conn && (conn.saveData === true ||
+      ['slow-2g', '2g', '3g'].includes(conn.effectiveType));
+
+    if (slowConnection) {
+      // On slow connections / data saver: don't load video, keep static poster + gradient
+      video.removeAttribute('autoplay');
+      video.preload = 'none';
       video.style.opacity = '0';
-    });
+    } else {
+      // Good connection: load and play the video
+      video.play().catch(() => {
+        // Autoplay blocked — try again after first touch
+        document.addEventListener('touchstart', () => { video.play().catch(() => {}); }, { once: true, passive: true });
+      });
+      video.addEventListener('ended', () => {
+        video.style.transition = 'opacity 1.2s ease';
+        video.style.opacity = '0';
+      });
+    }
   }
 
   // ── NEON OUTLINE BUTTON ANIMATION ──

@@ -22,7 +22,7 @@
     --border-glow: rgba(232,0,30,0.3);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; cursor: none; }
-  html { scroll-behavior: smooth; }
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
   body { background: var(--navy); color: var(--text-primary); font-family: 'Rajdhani', sans-serif; overflow-x: hidden; }
 
   /* ── CURSOR ── */
@@ -251,6 +251,12 @@
     .gallery-item-overlay { opacity: 1; background: linear-gradient(to top, rgba(5,13,26,0.75) 0%, transparent 50%); }
     .gallery-item img { filter: brightness(0.85) saturate(0.9); }
   }
+
+  /* ── REDUCED MOTION (accessibility + battery) ── */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+    #hero-video { display: none; }
+  }
 </style>
 </head>
 <body>
@@ -277,7 +283,7 @@
 <!-- HERO -->
 <section id="hero">
   <div class="hero-bg-static"></div>
-  <video id="hero-video" autoplay muted playsinline loop preload="auto">
+  <video id="hero-video" muted playsinline loop preload="metadata" poster="AIStudioBGPoster.jpg">
     <source src="AIStudioBG.mp4" type="video/mp4">
   </video>
   <div class="hero-overlay"></div>
@@ -508,13 +514,20 @@
     });
   });
 
-  // ── HERO VIDEO FORCE PLAY (mobile fallback) ──
+  // ── HERO VIDEO: connection-aware loading ──
   const heroVideo = document.getElementById('hero-video');
   if (heroVideo) {
-    heroVideo.muted = true;
-    const playPromise = heroVideo.play();
-    if (playPromise !== undefined) { playPromise.catch(() => { heroVideo.muted = true; heroVideo.play().catch(() => {}); }); }
-    document.addEventListener('touchstart', () => { if (heroVideo.paused) { heroVideo.muted = true; heroVideo.play().catch(() => {}); } }, { once: true, passive: true });
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const slowConnection = conn && (conn.saveData === true || ['slow-2g', '2g', '3g'].includes(conn.effectiveType));
+    if (slowConnection) {
+      heroVideo.preload = 'none';
+      heroVideo.style.opacity = '0';
+    } else {
+      heroVideo.muted = true;
+      heroVideo.play().catch(() => {
+        document.addEventListener('touchstart', () => { if (heroVideo.paused) { heroVideo.muted = true; heroVideo.play().catch(() => {}); } }, { once: true, passive: true });
+      });
+    }
   }
 
   // ── YOUTUBE LINKS — open in new tab / YouTube app on mobile ──
